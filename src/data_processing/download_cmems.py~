@@ -1,0 +1,59 @@
+import copernicusmarine as cm
+import os
+
+# --- Konfigurasi ---
+# GANTI DENGAN KREDENSIAL CMEMS KAMU
+USERNAME_CMEMS = 'dhafindelano@gmail.com'
+PASSWORD_CMEMS = '31Desember!'
+
+# Direktori untuk menyimpan data
+OUTPUT_DIRECTORY = './data_cmems'
+OUTPUT_FILENAME = 'cmems_red_sea_2007_2021.nc'
+
+# Pastikan direktori output ada
+os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
+
+# --- Detail Permintaan Data ---
+# Ini adalah ID produk untuk data reanalisis fisika global harian
+# Sumber: https://data.marine.copernicus.eu/product/GLOBAL_MULTIYEAR_PHY_001_030/
+PRODUCT_ID = 'cmems_mod_glo_phy_my_0.083_P1D-m'
+
+# Koordinat Laut Merah [lon_min, lon_max, lat_min, lat_max]
+REGION = [32.0, 44.0, 12.0, 30.0] 
+
+# Rentang waktu yang kita butuhkan
+START_DATE = '2007-01-01'
+END_DATE = '2021-12-31'
+
+# Variabel yang akan diunduh
+# 'sla' adalah Sea Level Anomaly
+# 'thetao' adalah Sea Surface Temperature
+VARIABLES = ['sla', 'thetao']
+
+# --- Proses Pengunduhan ---
+print(">>> Memulai proses pengunduhan data CMEMS...")
+print(f"    Produk    : {PRODUCT_ID}")
+print(f"    Wilayah   : {REGION}")
+print(f"    Periode   : {START_DATE} s.d. {END_DATE}")
+
+try:
+    cm.get(
+        username=USERNAME_CMEMS,
+        password=PASSWORD_CMEMS,
+        dataset_id=PRODUCT_ID,
+        minimum_longitude=REGION[0],
+        maximum_longitude=REGION[1],
+        minimum_latitude=REGION[2],
+        maximum_latitude=REGION[3],
+        start_datetime=f'{START_DATE}T00:00:00',
+        end_datetime=f'{END_DATE}T23:59:59',
+        variables=VARIABLES,
+        output_directory=OUTPUT_DIRECTORY,
+        output_filename=OUTPUT_FILENAME,
+        force_download=True # Paksa unduh ulang jika file sudah ada
+    )
+    print(f"\n✅ Sukses! Data berhasil diunduh ke: {os.path.join(OUTPUT_DIRECTORY, OUTPUT_FILENAME)}")
+
+except Exception as e:
+    print(f"\n❌ Gagal mengunduh data. Error: {e}")
+    print("    Pastikan username dan password CMEMS sudah benar.")

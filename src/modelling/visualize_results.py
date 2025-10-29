@@ -1,0 +1,110 @@
+import numpy as np
+import xarray as xr
+import json
+import os
+import tensorflow as tf
+import matplotlib.pyplot as plt
+
+# Impor dari file-file kita
+from data_generator import DataGenerator
+from build_model import N_TIME_STEPS
+
+# --- Konfigurasi Path ---
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+DATA_PATH = os.path.join(PROJECT_ROOT, 'data', 'processed', 'final_dataset.nc')
+STATS_PATH = os.path.join(PROJECT_ROOT, 'data', 'processed', 'normalization_stats.json')
+MODEL_PATH = os.path.join(PROJECT_ROOT, 'models', 'convlstm_best.keras')
+REPORT_DIR = os.path.join(PROJECT_ROOT, 'reports')
+os.makedirs(REPORT_DIR, exist_ok=True)
+
+# --- 1. Muat Model yang Sudah Dilatih ---
+print(f"Memuat model dari: {MODEL_PATH}")
+model = tf.keras.models.load_model(MODEL_PATH)
+
+# --- 2. Muat Statistik untuk Denormalisasi ---
+print(f"Memuat statistik dari: {STATS_PATH}")
+with open(STATS_PATH, 'r') as f:
+    stats = json.load(f)
+
+sla_mean = stats['sla']['mean']
+sla_std = stats['sla']['std']
+print(f"    SLA Mean: {sla_mean:.4f}, SLA Std: {sla_std:.4f}")
+
+# --- 3. Siapkan Data Validasi ---
+total_possible_samples = len(xr.open_dataset(DATA_PATH)['time']) - N_TIME_STEPS
+all_indices = np.arange(total_possible_samples)
+split_point = int(len(all_indices) * 0.8) # 80% train
+val_indices = all_indices[split_point:]   # Ambil 20% terakhir
+print(f"    Total sampel validasi: {len(val_indices)}")
+
+val_gen = DataGenerator(
+    data_path=DATA_PATH,
+    stats_path=STATS_PATH,
+    batch_size=4, 
+    n_time_steps=N_TIME_STEPS,
+    indices=val_indices
+)
+
+# --- 4. Ambil Satu Batch dan Lakukan Prediksi ---
+print("    Mengambil satu batch data validasi...")
+X_val, y_val_normalized = val_gen[0]
+
+print("    Melakukan prediksi model...")
+y_pred_normalized = model.predict(X_val)
+
+# --- 5. Denormalisasi Data ---
+y_val_actual = (y_val_normalized * sla_std) + sla_mean
+y_pred_actual = (y_pred_normalized * sla_std) + sla_mean
+print("    Data telah denormalisasi ke satuan meter.")
+
+# --- 6. Buat Plot Visualisasi (REVISI) ---
+N_EXAMPLES = 4
+print(f"    Membuat plot perbandingan untuk {N_EXAMPLES} contoh...")
+
+fig, axes = plt.subplots(N_EXAMPLES, 3, figsize=(18, N_EXAMPLES * 5)) # <-- Lebarkan figsize
+fig.suptitle('Perbandingan Prediksi Model vs. Data Asli (SLA dalam meter)', fontsize=16)
+
+# Tentukan rentang min/max global untuk 2 plot pertama
+vmax = np.nanmax(y_val_actual)
+vmin = np.nanmin(y_val_actual)
+
+for i in range(N_EXAMPLES):
+    
+    # --- Plot 1: Data Asli (Ground Truth) ---
+    ax = axes[i, 0]
+    # 💡 REVISI: Simpan gambar di 'im1'
+    im1 = ax.imshow(y_val_actual[i, :, :, 0], cmap='RdBu_r', vmin=vmin, vmax=vmax)
+    ax.set_title(f"Contoh {i+1}: Data Asli (Ground Truth)")
+    ax.invert_yaxis()
+    # 💡 REVISI: Buat colorbar HANYA untuk axis ini
+    fig.colorbar(im1, ax=ax, shrink=0.7)
+    
+    # --- Plot 2: Prediksi Model ---
+    ax = axes[i, 1]
+    # 💡 REVISI: Simpan gambar di 'im2'
+    im2 = ax.imshow(y_pred_actual[i, :, :, 0], cmap='RdBu_r', vmin=vmin, vmax=vmax)
+    ax.set_title(f"Contoh {i+1}: Prediksi Model")
+    ax.invert_yaxis()
+    # 💡 REVISI: Buat colorbar HANYA untuk axis ini
+    fig.colorbar(im2, ax=ax, shrink=0.7)
+    
+    # --- Plot 3: Peta Error (Selisih) ---
+    ax = axes[i, 2]
+    error_map = y_val_actual[i, :, :, 0] - y_pred_actual[i, :, :, 0]
+    vmax_err = np.nanmax(np.abs(error_map)) # Skala error terpisah
+    if vmax_err == 0: vmax_err = 1e-6 # hindari error jika 0
+        
+    # 💡 REVISI: Simpan gambar di 'im_err'
+    im_err = ax.imshow(error_map, cmap='coolwarm', vmin=-vmax_err, vmax=vmax_err)
+    ax.set_title(f"Contoh {i+1}: Error (Asli - Prediksi)")
+    ax.invert_yaxis()
+    # 💡 REVISI: Buat colorbar HANYA untuk axis ini
+    fig.colorbar(im_err, ax=ax, shrink=0.7)
+
+plt.tight_layout(rect=[0, 0.03, 1, 0.96])
+output_plot_path = os.path.join(REPORT_DIR, 'prediction_visualization.png')
+plt.savefig(output_plot_path)
+
+print(f"\n✅ Sukses! Plot visualisasi (REVISI) disimpan di:")
+print(f"   {output_plot_path}")
+print("   Silakan cek file PNG baru. Seharusnya sudah jauh lebih rapi!")

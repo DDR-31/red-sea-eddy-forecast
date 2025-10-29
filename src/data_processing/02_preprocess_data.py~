@@ -1,0 +1,59 @@
+import xarray as xr
+import os
+import sys
+
+# --- Pathing ---
+# Menentukan path root proyek secara dinamis
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+RAW_DATA_PATH = os.path.join(PROJECT_ROOT, 'data', 'raw', 'cmems_data.nc')
+PROCESSED_DATA_PATH = os.path.join(PROJECT_ROOT, 'data', 'processed', 'processed_data.nc')
+
+# Pastikan direktori output ada
+os.makedirs(os.path.dirname(PROCESSED_DATA_PATH), exist_ok=True)
+
+# --- Proses Pra-pemrosesan ---
+print(">>> Memulai skrip pra-pemrosesan data...")
+
+# 1. Muat Dataset Mentah
+try:
+    print(f"    Memuat data mentah dari: {RAW_DATA_PATH}")
+    ds_raw = xr.open_dataset(RAW_DATA_PATH)
+except FileNotFoundError:
+    print(f"❌ Error: File data mentah tidak ditemukan di {RAW_DATA_PATH}", file=sys.stderr)
+    print("    Pastikan kamu sudah menjalankan skrip 01_download_cmems.py terlebih dahulu.", file=sys.stderr)
+    sys.exit(1)
+
+# 2. Hitung Rata-rata Klimatologis (Mean Sea Surface)
+# Ini adalah langkah paling krusial. Kita menghitung ketinggian rata-rata
+# di setiap titik grid selama seluruh periode waktu (15 tahun).
+print("    Menghitung rata-rata klimatologis untuk 'zos'...")
+zos_mean = ds_raw['zos'].mean(dim='time')
+
+# 3. Hitung Anomali Tinggi Muka Laut (sla)
+# sla = nilai zos harian - nilai zos rata-rata
+print("    Menghitung 'sla' dari 'zos'...")
+sla = ds_raw['zos'] - zos_mean
+# Tambahkan atribut agar jelas ini variabel apa
+sla.attrs['long_name'] = 'Sea Level Anomaly'
+sla.attrs['units'] = 'm'
+sla.attrs['comment'] = 'Calculated as zos minus the 2007-2021 time-mean zos.'
+
+# 4. Buat Dataset yang Sudah Diproses
+# Kita gabungkan variabel baru 'sla' dan variabel 'thetao' yang kita butuhkan
+print("    Membuat dataset yang sudah diproses dengan variabel 'sla' dan 'thetao'.")
+ds_processed = xr.Dataset({
+    'sla': sla,
+    'thetao': ds_raw['thetao']
+})
+
+# 5. Penanganan Nilai yang Hilang (Missing Values) - Best Practice
+# Kadang ada data bolong. Kita isi dengan nilai terdekat (forward fill lalu backward fill)
+print("    Menangani nilai yang hilang (jika ada)...")
+ds_processed = ds_processed.ffill(dim='time').bfill(dim='time')
+
+# 6. Simpan Dataset yang Sudah Diproses
+print(f"    Menyimpan data yang sudah diproses ke: {PROCESSED_DATA_PATH}")
+ds_processed.to_netcdf(PROCESSED_DATA_PATH)
+
+print("\n✅ Sukses! Pra-pemrosesan data selesai.")
+print(f"    Dataset baru siap digunakan di: {PROCESSED_DATA_PATH}")

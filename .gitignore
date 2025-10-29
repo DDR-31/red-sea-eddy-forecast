@@ -1,0 +1,17 @@
+# Python virtual environment
+venv/
+*.pyc
+__pycache__/
+
+# Data mentah dan besar (Opsional tapi direkomendasikan jika > 100MB)
+ data/raw/cmems_data.nc
+ data/raw/era5_data_*.nc
+ data/raw/gebco_*.nc
+ data/processed/final_dataset*.nc
+
+# File model (biasanya besar)
+ models/*.keras
+
+# File sistem operasi
+.DS_Store
+Thumbs.db

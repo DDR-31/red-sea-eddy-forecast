@@ -1,0 +1,117 @@
+import numpy as np
+import xarray as xr
+import json
+import os
+import tensorflow as tf
+
+# Impor konfigurasi model kita dari skrip sebelumnya
+from build_model import N_TIME_STEPS, HEIGHT, WIDTH, N_CHANNELS
+
+class DataGenerator(tf.keras.utils.Sequence):
+    """
+    Class ini bertugas memuat data secara 'malas' (lazy-loading)
+    dari file NetCDF dan menyiapkannya untuk training model Keras.
+    """
+    def __init__(self, data_path, stats_path, batch_size, n_time_steps):
+        print(f"Menginisialisasi DataGenerator...")
+        
+        # 1. Buka dataset (tapi jangan muat ke memori)
+        self.ds = xr.open_dataset(data_path)
+        print(f"    Dataset dibuka dari: {data_path}")
+        
+        # 2. Muat statistik normalisasi
+        with open(stats_path, 'r') as f:
+            self.stats = json.load(f)
+        print(f"    Statistik normalisasi dimuat dari: {stats_path}")
+
+        # 3. Simpan parameter
+        self.batch_size = batch_size
+        self.n_time_steps = n_time_steps
+        self.variables = ['sla', 'thetao', 'u10', 'v10'] # Urutan channel
+        
+        # 4. Hitung jumlah total sampel yang bisa kita buat
+        # Total waktu - (jumlah hari untuk input + 1 hari untuk output) + 1
+        self.total_samples = len(self.ds['time']) - self.n_time_steps
+        
+        # Buat daftar indeks untuk semua sampel yang valid
+        self.indices = np.arange(self.total_samples)
+        
+        print(f"    Total hari data: {len(self.ds['time'])}")
+        print(f"    Total sampel (X, y) yang bisa dibuat: {self.total_samples}")
+
+    def __len__(self):
+        """Memberi tahu Keras ada berapa batch dalam satu epoch"""
+        return int(np.floor(self.total_samples / self.batch_size))
+
+    def __getitem__(self, index):
+        """
+        Fungsi ini dipanggil Keras untuk mengambil satu batch data.
+        'index' adalah nomor batch (misal, batch ke-0, ke-1, dst.)
+        """
+        
+        # 1. Dapatkan indeks sampel untuk batch ini
+        start_idx = index * self.batch_size
+        end_idx = (index + 1) * self.batch_size
+        batch_indices = self.indices[start_idx:end_idx]
+
+        # 2. Siapkan array kosong untuk X (input) dan y (target)
+        # Bentuk X: (batch, 5 hari, tinggi, lebar, 4 channel)
+        X = np.empty((self.batch_size, self.n_time_steps, HEIGHT, WIDTH, N_CHANNELS))
+        
+        # Bentuk y: (batch, tinggi, lebar, 1 channel)
+        y = np.empty((self.batch_size, HEIGHT, WIDTH, 1))
+
+        # 3. Muat, normalisasi, dan isi data untuk setiap sampel di batch
+        for i, sample_idx in enumerate(batch_indices):
+            
+            # --- Persiapan Input (X) ---
+            input_start_time = sample_idx
+            input_end_time = sample_idx + self.n_time_steps
+            
+            # Muat 4 channel input (ini adalah I/O dari disk)
+            # .isel() memilih berdasarkan indeks
+            # .to_array() menggabungkan 4 var jadi 1 array
+            # .values memuatnya ke memori sbg NumPy array
+            x_data = self.ds[self.variables].isel(time=slice(input_start_time, input_end_time))
+            
+            for c_idx, var in enumerate(self.variables):
+                mean = self.stats[var]['mean']
+                std = self.stats[var]['std']
+                # Normalisasi data
+                X[i, :, :, :, c_idx] = (x_data[var].values - mean) / std
+            
+            # --- Persiapan Target (y) ---
+            target_time_idx = input_end_time # Hari tepat setelah input berakhir
+            
+            # Muat 1 channel target ('sla')
+            y_data = self.ds['sla'].isel(time=target_time_idx).values
+            
+            # Normalisasi target juga!
+            sla_mean = self.stats['sla']['mean']
+            sla_std = self.stats['sla']['std']
+            y_normalized = (y_data - sla_mean) / sla_std
+            
+            # Tambahkan dimensi channel di akhir
+            y[i] = np.expand_dims(y_normalized, axis=-1)
+
+        return X, y
+
+if __name__ == "__main__":
+    # Bagian ini hanya untuk tes cepat (opsional)
+    print("\n>>> Melakukan tes DataGenerator...")
+    PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    DATA_PATH = os.path.join(PROJECT_ROOT, 'data', 'processed', 'final_dataset.nc')
+    STATS_PATH = os.path.join(PROJECT_ROOT, 'data', 'processed', 'normalization_stats.json')
+    
+    BATCH_SIZE = 4 # Coba batch kecil saja
+    
+    test_gen = DataGenerator(DATA_PATH, STATS_PATH, BATCH_SIZE, N_TIME_STEPS)
+    
+    # Ambil batch pertama
+    X_batch, y_batch = test_gen[0]
+    
+    print(f"\n✅ Tes berhasil diambil.")
+    print(f"    Bentuk X (input): {X_batch.shape}")
+    print(f"    Bentuk y (target): {y_batch.shape}")
+    print(f"    Nilai mean X (harus ~0): {X_batch.mean():.4f}")
+    print(f"    Nilai mean y (harus ~0): {y_batch.mean():.4f}")

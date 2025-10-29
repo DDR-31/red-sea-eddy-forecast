@@ -1,0 +1,69 @@
+import xarray as xr
+import os
+import sys
+import glob
+
+# --- Pathing ---
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+PROCESSED_DIR = os.path.join(PROJECT_ROOT, 'data', 'processed')
+RAW_DIR = os.path.join(PROJECT_ROOT, 'data', 'raw')
+
+OCEAN_DATA_PATH = os.path.join(PROCESSED_DIR, 'processed_data.nc')
+ERA5_FILES_PATTERN = os.path.join(RAW_DIR, 'era5_data_*.nc')
+FINAL_DATA_PATH = os.path.join(PROCESSED_DIR, 'final_dataset.nc')
+
+print(">>> Memulai skrip penggabungan dan regridding data (VERSI 2.0)...")
+
+try:
+    # 1. Muat data Oseanografi (Target kita)
+    print(f"    Memuat data laut dari: {OCEAN_DATA_PATH}")
+    ds_ocean = xr.open_dataset(OCEAN_DATA_PATH)
+except FileNotFoundError:
+    print(f"❌ Error: File {OCEAN_DATA_PATH} tidak ditemukan!", file=sys.stderr)
+    sys.exit(1)
+
+# 2. Muat dan Gabungkan semua file ERA5
+print(f"    Mencari file ERA5 di: {ERA5_FILES_PATTERN}")
+era5_files = sorted(glob.glob(ERA5_FILES_PATTERN))
+if not era5_files:
+    print("❌ Error: Tidak ada file data ERA5 yang ditemukan!", file=sys.stderr)
+    sys.exit(1)
+
+print(f"    Menemukan {len(era5_files)} file ERA5. Menggabungkan...")
+ds_era5 = xr.open_mfdataset(era5_files)
+
+# 3. 💡 PERBAIKAN: Ganti nama koordinat 'valid_time' menjadi 'time'
+if 'valid_time' in ds_era5.coords:
+    print("    Mengganti nama 'valid_time' -> 'time' pada data ERA5.")
+    ds_era5 = ds_era5.rename({'valid_time': 'time'})
+
+# 4. 💡 PERBAIKAN: Lakukan Penjajaran Waktu (Time Alignment)
+# Kita 'reindex' data ERA5 agar waktunya sama persis dengan ds_ocean.
+# Ini akan otomatis memotong data ERA5 (Juli-Des 2021) yang tidak kita perlukan.
+print(f"    Menyamakan rentang waktu ke data laut (total {len(ds_ocean['time'])} hari)...")
+ds_era5_aligned = ds_era5.reindex(time=ds_ocean['time'], method='nearest')
+
+# 5. Regridding (Interpolasi)
+print("    Melakukan regridding data ERA5 agar sesuai dengan grid CMEMS...")
+print("    Ini mungkin memakan waktu beberapa menit...")
+ds_era5_regridded = ds_era5_aligned.interp_like(ds_ocean, method='linear')
+
+# 6. Penanganan Nilai Hilang (NaN) pasca-interpolasi
+print("    Menangani nilai NaN pasca-regridding...")
+ds_era5_regridded = ds_era5_regridded.ffill(dim='latitude').bfill(dim='latitude')
+ds_era5_regridded = ds_era5_regridded.ffill(dim='longitude').bfill(dim='longitude')
+
+# 7. Gabungkan kedua dataset
+print("    Menggabungkan data laut dan data atmosfer...")
+# Sekarang 'time' sudah sejajar, merge akan berjalan mulus
+ds_final = xr.merge([ds_ocean, ds_era5_regridded])
+
+# 8. Simpan Dataset Final
+print(f"    Menyimpan dataset final ke: {FINAL_DATA_PATH}")
+ds_final.to_netcdf(FINAL_DATA_PATH)
+
+print("\n✅ Sukses! Dataset final siap untuk machine learning.")
+print(f"   Lokasi: {FINAL_DATA_PATH}")
+
+print("\n--- Ringkasan Dataset Final (Seharusnya Sudah Sinkron) ---")
+print(ds_final)
