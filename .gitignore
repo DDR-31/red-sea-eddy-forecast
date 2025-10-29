@@ -3,15 +3,23 @@ venv/
 *.pyc
 __pycache__/
 
-# Data mentah dan besar (Opsional tapi direkomendasikan jika > 100MB)
- data/raw/cmems_data.nc
- data/raw/era5_data_*.nc
- data/raw/gebco_*.nc
- data/processed/final_dataset*.nc
+# Data mentah dan besar (HARUS di-ignore!)
+data/raw/cmems_data.nc
+data/raw/era5_data_*.nc
+data/raw/gebco_*.nc
+data/processed/final_dataset*.nc
+data/processed/processed_data.nc # Tambahkan ini juga
+data/processed/bathymetry_regridded.nc # Tambahkan ini juga
 
-# File model (biasanya besar)
- models/*.keras
+
+# File model (HARUS di-ignore!)
+models/*.keras
 
 # File sistem operasi
 .DS_Store
 Thumbs.db
+
+# Reports might contain large images
+reports/*.png
+reports/*.jpg
+reports/*.txt # Kecuali jika kamu ingin menyimpan ringkasan model
