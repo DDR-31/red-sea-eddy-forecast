@@ -56,7 +56,8 @@ python src/data_processing/03_download_era5.py
 python src/data_processing/04_merge_datasets.py # Generates final_dataset_with_bathy.nc
 ```
 
-**2. Modelling Pipeline**
+**2. Modeling Pipeline:**
+```bash
 # Calculate normalization statistics for all 5 input variables
 python src/modelling/calculate_stats.py
 
@@ -71,32 +72,76 @@ python src/modelling/train_model.py # Saves the best model to models/convlstm_be
 
 # Generate visualizations summarizing model performance
 python src/modelling/visualize_combined.py # Creates reports/combined_visualization.png
+```
+## Data Sources
 
-Data Sources
-Ocean Data: CMEMS Global Ocean Physics Reanalysis (cmems_mod_glo_phy-cur_my_0.083_P1D-m). Variables utilized: zos (Sea Surface Height), thetao (Sea Surface Temperature). Data format: NetCDF. Requires CMEMS user registration.
+* **Ocean Data:**
+    * **Source:** CMEMS Global Ocean Physics Reanalysis (`cmems_mod_glo_phy-cur_my_0.083_P1D-m`)
+    * **Variables:** `zos` (Sea Surface Height), `thetao` (Sea Surface Temperature)
+    * **Format:** NetCDF
+    * **Access:** Requires CMEMS user registration
 
-Atmospheric Data: CDS ERA5 Reanalysis (reanalysis-era5-single-levels). Variables utilized: 10m_u_component_of_wind, 10m_v_component_of_wind. Data format: NetCDF. Requires CDS user registration.
+* **Atmospheric Data:**
+    * **Source:** CDS ERA5 Reanalysis (`reanalysis-era5-single-levels`)
+    * **Variables:** `10m_u_component_of_wind`, `10m_v_component_of_wind`
+    * **Format:** NetCDF
+    * **Access:** Requires CDS user registration
 
-Bathymetry Data: GEBCO Gridded Bathymetry Data (e.g., GEBCO_2023). Variable utilized: elevation. Data format: NetCDF. Publicly available for download.
+* **Bathymetry Data:**
+    * **Source:** GEBCO Gridded Bathymetry Data (e.g., GEBCO_2023)
+    * **Variable:** `elevation`
+    * **Format:** NetCDF
+    * **Access:** Publicly available for download
 
-Processed Data: The final merged and preprocessed dataset (final_dataset_with_bathy.nc), suitable for model training, is stored in the data/processed/ directory. Data format: NetCDF.
+* **Processed Data:**
+    * **File:** `final_dataset_with_bathy.nc` (located in `data/processed/`)
+    * **Description:** The final merged, regridded, synchronized, and preprocessed dataset used for model training.
+    * **Format:** NetCDF
 
-Methodology
-Data Wrangling: Leveraged the xarray library for loading, selecting the surface layer, calculating Sea Level Anomaly (sla = zos - zos.mean(dim='time')), temporal alignment (reindex), spatial regridding (interp_like), dataset merging, and handling missing values (fillna).
+## Methodology
 
-Deep Learning Model: Implemented a ConvLSTM U-Net architecture using TensorFlow/Keras for spatio-temporal sequence-to-one prediction. The model forecasts sla at t+1 based on 5 input features (sla, thetao, u10, v10, bathy) from the preceding 5 days (t-4 to t).
+* **Data Wrangling:**
+    * **Library:** Utilized `xarray` for core data manipulation.
+    * **Tasks Included:**
+        * Loading NetCDF files.
+        * Selecting the ocean surface layer.
+        * Calculating Sea Level Anomaly (`sla = zos - zos.mean(dim='time')`).
+        * Aligning datasets temporally (`reindex`).
+        * Interpolating grids spatially (`interp_like`).
+        * Merging disparate datasets.
+        * Handling missing values (`fillna`).
 
-Training Data Handling: Utilized a custom DataGenerator class (inheriting tf.keras.utils.Sequence) for efficient lazy-loading of large NetCDF datasets, performing on-the-fly Z-score normalization, and masking land pixels (nan values replaced with 0).
+* **Deep Learning Model:**
+    * **Architecture:** Implemented a **ConvLSTM U-Net** using TensorFlow/Keras.
+        
+    * **Task:** Spatio-temporal sequence-to-one forecasting.
+    * **Input Features:** `sla`, `thetao`, `u10`, `v10`, `bathy` over the previous 5 days (`t-4` to `t`).
+    * **Output Target:** `sla` at the next day (`t+1`).
 
-Model Training: Employed the Adam optimizer with a Mean Squared Error loss function. Incorporated Keras callbacks ModelCheckpoint (saving the best model based on validation loss) and EarlyStopping (halting training if validation loss plateaus).
+* **Training Data Handling:**
+    * **Implementation:** Developed a custom `DataGenerator` class (inheriting `tf.keras.utils.Sequence`).
+    * **Features:**
+        * Efficient lazy-loading of large NetCDF data to manage memory usage.
+        * On-the-fly Z-score normalization using pre-calculated statistics.
+        * Masking of land pixels by replacing `NaN` values with `0`.
 
-Evaluation: Model performance was assessed through visual comparison of predicted SLA fields against ground truth, calculation of spatial Root Mean Squared Error (RMSE) maps, and analysis of Hovmöller diagrams to verify the prediction of eddy propagation dynamics.
+* **Model Training:**
+    * **Optimizer:** Adam.
+    * **Loss Function:** Mean Squared Error (MSE).
+    * **Callbacks:**
+        * `ModelCheckpoint`: Saves the best model based on `val_loss`.
+        * `EarlyStopping`: Halts training if `val_loss` does not improve, preventing overfitting.
 
-Results
-The trained ConvLSTM U-Net model demonstrates the capability to predict the location, general structure, and westward propagation of mesoscale eddies within the Red Sea 24 hours in advance.
+* **Evaluation:**
+    * **Techniques:** Assessed model performance using multiple methods:
+        * Visual comparison of predicted SLA fields against ground truth maps.
+        * Calculation and visualization of spatial Root Mean Squared Error (RMSE) maps.
+        * Analysis of Hovmöller diagrams to evaluate the prediction of eddy propagation dynamics.
+        
 
-The inclusion of bathymetry data as an input feature was observed to significantly reduce prediction errors along coastal boundaries, as quantitatively indicated by the spatial RMSE analysis.
+## Results
 
-The U-Net architecture produced visually sharper predictions with enhanced representation of spatial details compared to a simpler stacked ConvLSTM baseline model (evaluated visually and through preliminary spectral analysis).
-
-The weights of the best performing U-Net model during training are saved in models/convlstm_best.keras.
+* **Prediction Capability:** The trained ConvLSTM U-Net model demonstrates the ability to predict the **location, general structure, and westward propagation** of mesoscale eddies within the Red Sea 24 hours in advance.
+* **Impact of Bathymetry:** The inclusion of bathymetry data as an input feature was observed to significantly **reduce prediction errors along coastal boundaries**, as quantitatively confirmed by the spatial RMSE analysis.
+* **U-Net Performance:** The U-Net architecture yielded visually **sharper predictions** with improved representation of spatial details compared to a simpler stacked ConvLSTM baseline, supported by visual inspection and preliminary spectral analysis.
+* **Saved Model:** The weights of the best performing U-Net model identified during training are saved in the file `models/convlstm_best.keras`.
