@@ -3,10 +3,9 @@ import os
 import sys
 
 # --- Konfigurasi ---
-# GANTI DENGAN KREDENSIAL CMEMS KAMU
-# Sebaiknya gunakan environment variables untuk keamanan, tapi untuk sekarang kita hardcode dulu.
-USERNAME_CMEMS = 'dsantosa'
-PASSWORD_CMEMS = '31Desember!'
+# USE YOUR CMEMS CREDENTIALS
+USERNAME_CMEMS = 'USERNAME'
+PASSWORD_CMEMS = 'PASSWORD'
 
 # --- Pathing yang Robust ---
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
