@@ -22,4 +22,4 @@ Thumbs.db
 # Reports might contain large images
 reports/*.png
 reports/*.jpg
-reports/*.txt # Kecuali jika kamu ingin menyimpan ringkasan model
+reports/*.txt
