@@ -1,0 +1,9 @@
+tensorflow>=2.20
+xarray
+numpy
+scipy
+netcdf4
+cdsapi
+copernicusmarine
+matplotlib
+tqdm
