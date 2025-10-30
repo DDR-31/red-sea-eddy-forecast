@@ -3,7 +3,7 @@ venv/
 *.pyc
 __pycache__/
 
-# Data mentah dan besar (HARUS di-ignore!)
+# Raw and Large Files
 data/raw/cmems_data.nc
 data/raw/era5_data_*.nc
 data/raw/gebco_*.nc
@@ -12,7 +12,7 @@ data/processed/processed_data.nc # Tambahkan ini juga
 data/processed/bathymetry_regridded.nc # Tambahkan ini juga
 
 
-# File model (HARUS di-ignore!)
+# File model
 models/*.keras
 
 # File sistem operasi
