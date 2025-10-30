@@ -54,6 +54,7 @@ python src/data_processing/01_download_cmems.py
 python src/data_processing/02_preprocess_data.py
 python src/data_processing/03_download_era5.py
 python src/data_processing/04_merge_datasets.py # Generates final_dataset_with_bathy.nc
+```
 
 **2. Modelling Pipeline**
 # Calculate normalization statistics for all 5 input variables
